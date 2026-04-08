@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    ANTHROPIC_API_KEY: str = ""
+
     FRONTEND_URL: str = "http://localhost:3000"
 
     class Config:

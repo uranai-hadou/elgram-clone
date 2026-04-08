@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, accounts, autorespond, webhook, app_settings
+from app.api import auth, accounts, autorespond, webhook, app_settings, mentor
 
 
 @asynccontextmanager
@@ -30,6 +30,7 @@ app.include_router(accounts.router, prefix="/api")
 app.include_router(autorespond.router, prefix="/api")
 app.include_router(webhook.router, prefix="/api")
 app.include_router(app_settings.router, prefix="/api")
+app.include_router(mentor.router, prefix="/api")
 
 
 @app.get("/api/health")

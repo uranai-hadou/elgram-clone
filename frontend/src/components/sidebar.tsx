@@ -8,6 +8,7 @@ import {
   Camera,
   Settings,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -15,6 +16,7 @@ const navItems = [
   { href: "/dashboard", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/autorespond", label: "自動応答", icon: MessageSquareReply },
   { href: "/accounts", label: "アカウント連携", icon: Camera },
+  { href: "/mentor", label: "メンターBot", icon: Sparkles },
   { href: "/settings", label: "API設定", icon: Settings },
 ];
 
