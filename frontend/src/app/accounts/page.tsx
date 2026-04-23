@@ -37,8 +37,17 @@ export default function AccountsPage() {
       await api.post(`/api/accounts/instagram/${id}/subscribe`);
       toast.success("Webhookを再登録しました");
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      toast.error(e.response?.data?.detail || "再登録に失敗しました");
+      const e = err as {
+        response?: {
+          data?: { detail?: string; meta?: { error?: { message?: string; code?: number } } };
+        };
+      };
+      const metaErr = e.response?.data?.meta?.error;
+      const msg = metaErr?.message
+        ? `${metaErr.message}${metaErr.code ? ` (code ${metaErr.code})` : ""}`
+        : e.response?.data?.detail || "再登録に失敗しました";
+      toast.error(msg, { duration: 8000 });
+      console.error("Subscribe error:", e.response?.data);
     }
   };
 
