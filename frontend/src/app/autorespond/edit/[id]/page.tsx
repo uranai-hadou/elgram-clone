@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Check, X, Play } from "lucide-react";
@@ -17,12 +17,14 @@ type Media = {
 };
 type MediaTarget = { id: string; caption?: string; media_type?: string };
 
-export default function NewRulePage() {
+export default function EditRulePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [mediaList, setMediaList] = useState<Media[]>([]);
-  const [loadingMedia, setLoadingMedia] = useState(false);
   const [mediaFilter, setMediaFilter] = useState<"all" | "feed" | "reel">("all");
+  const [loadingMedia, setLoadingMedia] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mediaTargets, setMediaTargets] = useState<MediaTarget[]>([]);
@@ -39,17 +41,57 @@ export default function NewRulePage() {
   });
 
   useEffect(() => {
-    api
-      .get("/api/accounts/instagram")
-      .then((res) => {
-        setAccounts(res.data);
-        if (res.data.length > 0) {
-          setForm((f) => ({ ...f, ig_account_id: res.data[0].id }));
-          fetchMedia(res.data[0].id);
+    Promise.all([
+      api.get("/api/accounts/instagram"),
+      api.get("/api/autorespond/rules"),
+    ]).then(([accountsRes, rulesRes]) => {
+      setAccounts(accountsRes.data);
+      type RuleShape = {
+        id: string;
+        ig_account_id: string;
+        name: string;
+        media_id?: string | null;
+        media_caption?: string | null;
+        media_type?: string | null;
+        media_targets?: MediaTarget[];
+        trigger_type: string;
+        match_type: string;
+        trigger_keyword?: string | null;
+        response_type: string;
+        response_message: string;
+        response_image_url?: string | null;
+        comment_reply_message?: string | null;
+      };
+      const rule = (rulesRes.data as RuleShape[]).find((r) => r.id === id);
+      if (rule) {
+        setForm({
+          ig_account_id: rule.ig_account_id,
+          name: rule.name,
+          trigger_type: rule.trigger_type,
+          match_type: rule.match_type,
+          trigger_keyword: rule.trigger_keyword || "",
+          response_type: rule.response_type,
+          response_message: rule.response_message,
+          response_image_url: rule.response_image_url || "",
+          comment_reply_message: rule.comment_reply_message || "",
+        });
+        // Backward compat: if media_targets missing but legacy media_id set, hydrate as single target
+        if (rule.media_targets && rule.media_targets.length > 0) {
+          setMediaTargets(rule.media_targets);
+        } else if (rule.media_id) {
+          setMediaTargets([
+            {
+              id: rule.media_id,
+              caption: rule.media_caption || "",
+              media_type: rule.media_type || "",
+            },
+          ]);
         }
-      })
-      .catch(() => {});
-  }, []);
+        fetchMedia(rule.ig_account_id);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [id]);
 
   const fetchMedia = (accountId: string) => {
     if (!accountId) return;
@@ -57,11 +99,7 @@ export default function NewRulePage() {
     api
       .get(`/api/accounts/instagram/media?account_id=${accountId}`)
       .then((res) => setMediaList(res.data))
-      .catch((err) => {
-        setMediaList([]);
-        toast.error("投稿の取得に失敗しました");
-        console.error("Media fetch error:", err.response?.data);
-      })
+      .catch(() => setMediaList([]))
       .finally(() => setLoadingMedia(false));
   };
 
@@ -82,20 +120,18 @@ export default function NewRulePage() {
     });
   };
 
-  const clearMediaSelection = () => setMediaTargets([]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/api/autorespond/rules", {
+      await api.patch(`/api/autorespond/rules/${id}`, {
         ...form,
         media_targets: mediaTargets,
       });
-      toast.success("ルールを作成しました");
+      toast.success("ルールを更新しました");
       router.push("/autorespond");
     } catch {
-      toast.error("作成に失敗しました");
+      toast.error("更新に失敗しました");
     } finally {
       setSubmitting(false);
     }
@@ -104,11 +140,17 @@ export default function NewRulePage() {
   const update = (key: string, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
-      <h2 className="mb-6 text-2xl font-bold text-gray-900">
-        新しい自動応答ルール
-      </h2>
+      <h2 className="mb-6 text-2xl font-bold text-gray-900">ルールを編集</h2>
       <form
         onSubmit={handleSubmit}
         className="space-y-5 rounded-xl border border-gray-200 bg-white p-6"
@@ -123,27 +165,19 @@ export default function NewRulePage() {
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             required
           >
-            {accounts.length === 0 && (
-              <option value="">アカウントを連携してください</option>
-            )}
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                @{a.username}
-              </option>
+              <option key={a.id} value={a.id}>@{a.username}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            ルール名
-          </label>
+          <label className="block text-sm font-medium text-gray-700">ルール名</label>
           <input
             type="text"
             required
             value={form.name}
             onChange={(e) => update("name", e.target.value)}
-            placeholder="例: 資料請求への自動DM"
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
@@ -156,7 +190,7 @@ export default function NewRulePage() {
             {mediaTargets.length > 0 && (
               <button
                 type="button"
-                onClick={clearMediaSelection}
+                onClick={() => setMediaTargets([])}
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-500"
               >
                 <X className="h-3 w-3" />
@@ -199,11 +233,7 @@ export default function NewRulePage() {
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
               投稿を読み込み中...
             </div>
-          ) : mediaList.length === 0 ? (
-            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-400">
-              投稿が見つかりません
-            </div>
-          ) : (
+          ) : mediaList.length > 0 ? (
             <div className="mt-3 grid grid-cols-3 gap-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200 p-2">
               {mediaList.filter((m) => {
                 if (mediaFilter === "all") return true;
@@ -217,89 +247,52 @@ export default function NewRulePage() {
                     type="button"
                     onClick={() => toggleMedia(m)}
                     className={`group relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${
-                      selected
-                        ? "border-blue-500 ring-2 ring-blue-200"
-                        : "border-transparent hover:border-gray-300"
+                      selected ? "border-blue-500 ring-2 ring-blue-200" : "border-transparent hover:border-gray-300"
                     }`}
                   >
                     {m.thumbnail_url ? (
-                      <img
-                        src={m.thumbnail_url}
-                        alt={m.caption || "投稿"}
-                        className="h-full w-full object-cover"
-                      />
+                      <img src={m.thumbnail_url} alt={m.caption || "投稿"} className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">
-                        No Image
-                      </div>
+                      <div className="flex h-full w-full items-center justify-center bg-gray-100 text-xs text-gray-400">No Image</div>
                     )}
-
                     {m.media_type === "VIDEO" && (
                       <div className="absolute left-1 top-1 rounded bg-black/60 p-0.5">
                         <Play className="h-3 w-3 fill-white text-white" />
                       </div>
                     )}
-                    {m.media_type === "CAROUSEL_ALBUM" && (
-                      <div className="absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] text-white">
-                        複数
-                      </div>
-                    )}
-
                     {selected && (
                       <div className="absolute inset-0 flex items-center justify-center bg-blue-500/30">
-                        <div className="rounded-full bg-blue-500 p-1">
-                          <Check className="h-4 w-4 text-white" />
-                        </div>
+                        <div className="rounded-full bg-blue-500 p-1"><Check className="h-4 w-4 text-white" /></div>
                       </div>
                     )}
-
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <p className="line-clamp-2 text-[10px] leading-tight text-white">
-                        {m.caption || "(キャプションなし)"}
-                      </p>
-                      <p className="mt-0.5 text-[9px] text-white/70">
-                        {new Date(m.timestamp).toLocaleDateString("ja-JP")}
-                      </p>
+                      <p className="line-clamp-2 text-[10px] leading-tight text-white">{m.caption || "(キャプションなし)"}</p>
                     </div>
                   </button>
                 );
               })}
             </div>
-          )}
+          ) : null}
 
           {mediaTargets.length > 0 && (
-            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
-              <p className="text-xs font-medium text-blue-700">
-                選択中: {mediaTargets.length}件の投稿に適用
-              </p>
+            <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+              <p className="text-xs font-medium text-blue-700">選択中: {mediaTargets.length}件の投稿に適用</p>
             </div>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              トリガータイプ
-            </label>
-            <select
-              value={form.trigger_type}
-              onChange={(e) => update("trigger_type", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
+            <label className="block text-sm font-medium text-gray-700">トリガータイプ</label>
+            <select value={form.trigger_type} onChange={(e) => update("trigger_type", e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
               <option value="comment">コメント</option>
               <option value="dm">DM</option>
               <option value="story_mention">ストーリーメンション</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              マッチタイプ
-            </label>
-            <select
-              value={form.match_type}
-              onChange={(e) => update("match_type", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
+            <label className="block text-sm font-medium text-gray-700">マッチタイプ</label>
+            <select value={form.match_type} onChange={(e) => update("match_type", e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
               <option value="contains">部分一致</option>
               <option value="exact">完全一致</option>
               <option value="regex">正規表現</option>
@@ -308,9 +301,7 @@ export default function NewRulePage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            トリガーキーワード
-          </label>
+          <label className="block text-sm font-medium text-gray-700">トリガーキーワード</label>
           <input
             type="text"
             value={form.trigger_keyword}
@@ -318,20 +309,12 @@ export default function NewRulePage() {
             placeholder="空欄にすると全てのコメントに反応します"
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
-          <p className="mt-1 text-xs text-gray-400">
-            空欄の場合、あらゆるコメントに対して自動返信が発動します
-          </p>
+          <p className="mt-1 text-xs text-gray-400">空欄の場合、あらゆるコメントに対して自動返信が発動します</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">
-            応答タイプ
-          </label>
-          <select
-            value={form.response_type}
-            onChange={(e) => update("response_type", e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-          >
+          <label className="block text-sm font-medium text-gray-700">応答タイプ</label>
+          <select value={form.response_type} onChange={(e) => update("response_type", e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
             <option value="dm">DM送信</option>
             <option value="comment_reply">コメント返信</option>
           </select>
@@ -346,7 +329,6 @@ export default function NewRulePage() {
             rows={4}
             value={form.response_message}
             onChange={(e) => update("response_message", e.target.value)}
-            placeholder="自動送信するメッセージを入力してください"
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
         </div>
@@ -371,52 +353,23 @@ export default function NewRulePage() {
 
         {form.response_type === "dm" && (
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              画像（任意）
-            </label>
-            <p className="mt-0.5 text-xs text-gray-400">
-              DMにテキストと一緒に画像を送信します
-            </p>
-
+            <label className="block text-sm font-medium text-gray-700">画像（任意）</label>
             {form.response_image_url ? (
               <div className="mt-2 relative inline-block">
-                <img
-                  src={form.response_image_url}
-                  alt="アップロード済み"
-                  className="h-32 w-32 rounded-lg border border-gray-200 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => update("response_image_url", "")}
-                  className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white hover:bg-red-600"
-                >
+                <img src={form.response_image_url} alt="アップロード済み" className="h-32 w-32 rounded-lg border border-gray-200 object-cover" />
+                <button type="button" onClick={() => update("response_image_url", "")} className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white hover:bg-red-600">
                   <X className="h-3 w-3" />
                 </button>
               </div>
             ) : (
               <label
-                className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
-                  uploading
-                    ? "border-blue-300 bg-blue-50"
-                    : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
-                }`}
+                className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${uploading ? "border-blue-300 bg-blue-50" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"}`}
                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 onDrop={async (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const file = e.dataTransfer.files[0];
-                  if (!file) return;
+                  e.preventDefault(); e.stopPropagation();
+                  const file = e.dataTransfer.files[0]; if (!file) return;
                   setUploading(true);
-                  try {
-                    const fd = new FormData();
-                    fd.append("file", file);
-                    const res = await api.post("/api/upload", fd);
-                    update("response_image_url", res.data.url);
-                  } catch {
-                    toast.error("画像のアップロードに失敗しました");
-                  } finally {
-                    setUploading(false);
-                  }
+                  try { const fd = new FormData(); fd.append("file", file); const res = await api.post("/api/upload", fd); update("response_image_url", res.data.url); } catch { toast.error("画像のアップロードに失敗しました"); } finally { setUploading(false); }
                 }}
               >
                 {uploading ? (
@@ -430,44 +383,21 @@ export default function NewRulePage() {
                     <span className="text-xs text-gray-400">PNG, JPG, GIF</span>
                   </>
                 )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setUploading(true);
-                    try {
-                      const fd = new FormData();
-                      fd.append("file", file);
-                      const res = await api.post("/api/upload", fd);
-                      update("response_image_url", res.data.url);
-                    } catch {
-                      toast.error("画像のアップロードに失敗しました");
-                    } finally {
-                      setUploading(false);
-                    }
-                  }}
-                />
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  setUploading(true);
+                  try { const fd = new FormData(); fd.append("file", file); const res = await api.post("/api/upload", fd); update("response_image_url", res.data.url); } catch { toast.error("画像のアップロードに失敗しました"); } finally { setUploading(false); }
+                }} />
               </label>
             )}
           </div>
         )}
 
         <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {submitting ? "作成中..." : "ルールを作成"}
+          <button type="submit" disabled={submitting} className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {submitting ? "保存中..." : "変更を保存"}
           </button>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
+          <button type="button" onClick={() => router.back()} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
             キャンセル
           </button>
         </div>

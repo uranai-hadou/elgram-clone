@@ -34,7 +34,7 @@ export default function SettingsPage() {
 
   const webhookUrl =
     typeof window !== "undefined"
-      ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/webhook/instagram`
+      ? `${window.location.origin}/api/webhook/instagram`
       : "";
 
   const handleSubmit = async (e: React.FormEvent) => {

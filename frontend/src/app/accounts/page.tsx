@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Trash2, ExternalLink } from "lucide-react";
+import { Camera, Trash2, ExternalLink, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
 
@@ -29,6 +29,16 @@ export default function AccountsPage() {
       window.location.href = res.data.auth_url;
     } catch {
       toast.error("認証URLの取得に失敗しました");
+    }
+  };
+
+  const resubscribe = async (id: string) => {
+    try {
+      await api.post(`/api/accounts/instagram/${id}/subscribe`);
+      toast.success("Webhookを再登録しました");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      toast.error(e.response?.data?.detail || "再登録に失敗しました");
     }
   };
 
@@ -86,12 +96,21 @@ export default function AccountsPage() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => disconnectAccount(account.id)}
-                className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => resubscribe(account.id)}
+                  title="Webhookを再登録"
+                  className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => disconnectAccount(account.id)}
+                  className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

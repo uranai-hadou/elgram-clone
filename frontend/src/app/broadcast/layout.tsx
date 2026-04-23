@@ -2,7 +2,7 @@
 
 import { Sidebar } from "@/components/sidebar";
 
-export default function SettingsLayout({
+export default function BroadcastLayout({
   children,
 }: {
   children: React.ReactNode;
