@@ -25,18 +25,25 @@ export async function POST(
   }
   const account = rows[0];
 
-  const res = await fetch(
-    `${GRAPH}/v21.0/${account.igUserId}/subscribed_apps?subscribed_fields=messages,comments&access_token=${account.accessToken}`,
-    { method: "POST" }
-  );
-  const data = await res.json().catch(() => ({}));
+  const url = `${GRAPH}/v21.0/${account.igUserId}/subscribed_apps?subscribed_fields=messages,comments&access_token=${account.accessToken}`;
 
-  if (!res.ok) {
-    return NextResponse.json(
-      { detail: "Subscription failed", meta: data },
-      { status: 400 }
-    );
+  let lastData: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    lastData = data;
+
+    if (res.ok) {
+      return NextResponse.json({ success: true, meta: data });
+    }
+
+    const errObj = (data as { error?: { is_transient?: boolean; code?: number } }).error;
+    if (!errObj?.is_transient) break;
+    await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
   }
 
-  return NextResponse.json({ success: true, meta: data });
+  return NextResponse.json(
+    { detail: "Subscription failed", meta: lastData },
+    { status: 400 }
+  );
 }
