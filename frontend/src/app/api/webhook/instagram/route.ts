@@ -34,11 +34,31 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  console.log("[webhook] received:", JSON.stringify(body));
+  // Parse as text first so we can extract large integer IDs without JS Number precision loss
+  const rawText = await req.text();
+  const body = JSON.parse(rawText);
+  console.log("[webhook] received:", rawText);
 
-  for (const entry of body.entry || []) {
-    const igUserId = entry.id || "";
+  // Extract entry.id values in order as strings from raw text
+  const entryIdMatches = [...rawText.matchAll(/"entry"\s*:\s*\[([\s\S]*?)\]/g)];
+  const entryIds: string[] = [];
+  if (entryIdMatches.length > 0) {
+    const inner = entryIdMatches[0][1];
+    const idMatches = [...inner.matchAll(/"id"\s*:\s*(?:"(\d+)"|(\d+))/g)];
+    for (const m of idMatches) entryIds.push(m[1] || m[2]);
+  }
+
+  type Entry = {
+    id?: string | number;
+    changes?: Array<{ field?: string; value?: Record<string, unknown> }>;
+    messaging?: Array<Record<string, unknown>>;
+  };
+  const entries: Array<{ entry: Entry; igUserId: string }> = [];
+  (body.entry || []).forEach((e: Entry, i: number) => {
+    entries.push({ entry: e, igUserId: entryIds[i] || String(e.id || "") });
+  });
+
+  for (const { entry, igUserId } of entries) {
 
     const accounts = await db.select().from(instagramAccounts).where(eq(instagramAccounts.igUserId, igUserId));
     if (accounts.length === 0) {
@@ -51,10 +71,10 @@ export async function POST(req: Request) {
     // Comments
     for (const change of entry.changes || []) {
       if (change.field !== "comments") continue;
-      const v = change.value || {};
-      const text = v.text || "";
-      const senderId = v.from?.id || "";
-      const commentId = v.id || "";
+      const v = (change.value || {}) as Record<string, unknown>;
+      const text = (v.text as string) || "";
+      const senderId = ((v.from as Record<string, unknown> | undefined)?.id as string) || "";
+      const commentId = (v.id as string) || "";
 
       await db.insert(messageLogs).values({
         igAccountId: account.id,
@@ -65,7 +85,7 @@ export async function POST(req: Request) {
         igMessageId: commentId,
       });
 
-      const mediaId = v.media?.id || "";
+      const mediaId = ((v.media as Record<string, unknown> | undefined)?.id as string) || "";
 
       const rules = await db.select().from(autorespondRules).where(
         and(eq(autorespondRules.igAccountId, account.id), eq(autorespondRules.isActive, true), eq(autorespondRules.triggerType, "comment"))
@@ -156,10 +176,15 @@ export async function POST(req: Request) {
 
     // DMs
     for (const messaging of entry.messaging || []) {
-      const message = messaging.message;
+      const message = (messaging as Record<string, unknown>).message as
+        | { is_echo?: boolean; text?: string; mid?: string }
+        | undefined;
       if (!message || message.is_echo) continue;
       const text = message.text || "";
-      const senderId = messaging.sender?.id || "";
+      const senderId =
+        (((messaging as Record<string, unknown>).sender as
+          | Record<string, unknown>
+          | undefined)?.id as string) || "";
 
       await db.insert(messageLogs).values({
         igAccountId: account.id,

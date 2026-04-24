@@ -32,14 +32,16 @@ export async function POST(req: Request) {
     }),
   });
 
+  const tokenText = await tokenRes.text();
   if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    return NextResponse.json({ detail: "Token exchange failed: " + err }, { status: 400 });
+    return NextResponse.json({ detail: "Token exchange failed: " + tokenText }, { status: 400 });
   }
 
-  const tokenData = await tokenRes.json();
+  const tokenData = JSON.parse(tokenText);
   const shortToken = tokenData.access_token;
-  const igUserId = String(tokenData.user_id);
+  // Extract user_id from raw text to avoid JS Number precision loss on 17-digit IGSIDs
+  const userIdMatch = tokenText.match(/"user_id"\s*:\s*(?:"(\d+)"|(\d+))/);
+  const igUserId = userIdMatch ? (userIdMatch[1] || userIdMatch[2]) : String(tokenData.user_id);
 
   const longRes = await fetch(
     `${GRAPH}/access_token?grant_type=ig_exchange_token&client_secret=${s.metaAppSecret}&access_token=${shortToken}`
