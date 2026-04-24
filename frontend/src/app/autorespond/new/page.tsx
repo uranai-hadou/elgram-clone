@@ -26,6 +26,7 @@ export default function NewRulePage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mediaTargets, setMediaTargets] = useState<MediaTarget[]>([]);
+  const [targetScope, setTargetScope] = useState<"specific" | "all" | "feeds" | "reels">("specific");
   const [form, setForm] = useState({
     ig_account_id: "",
     name: "",
@@ -90,7 +91,8 @@ export default function NewRulePage() {
     try {
       await api.post("/api/autorespond/rules", {
         ...form,
-        media_targets: mediaTargets,
+        target_scope: targetScope,
+        media_targets: targetScope === "specific" ? mediaTargets : [],
       });
       toast.success("ルールを作成しました");
       router.push("/autorespond");
@@ -149,6 +151,40 @@ export default function NewRulePage() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-gray-700">
+            適用範囲
+          </label>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {([
+              { key: "all", label: "全ての投稿" },
+              { key: "feeds", label: "フィードのみ" },
+              { key: "reels", label: "リールのみ" },
+              { key: "specific", label: "特定の投稿" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setTargetScope(opt.key)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  targetScope === opt.key
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-gray-400">
+            {targetScope === "all" && "現在と将来の全ての投稿に適用されます。"}
+            {targetScope === "feeds" && "フィード投稿（画像・カルーセル）に適用されます。"}
+            {targetScope === "reels" && "リール（動画）に適用されます。"}
+            {targetScope === "specific" && "下で選択した投稿のみに適用されます。"}
+          </p>
+        </div>
+
+        {targetScope === "specific" && (
+        <div>
           <div className="flex items-center justify-between">
             <label className="block text-sm font-medium text-gray-700">
               対象投稿（複数選択可）
@@ -165,7 +201,7 @@ export default function NewRulePage() {
             )}
           </div>
           <p className="mt-0.5 text-xs text-gray-400">
-            投稿をクリックで選択／解除。未選択の場合は全投稿が対象です。
+            投稿をクリックで選択。
           </p>
 
           {mediaList.length > 0 && (
@@ -275,6 +311,7 @@ export default function NewRulePage() {
             </div>
           )}
         </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>

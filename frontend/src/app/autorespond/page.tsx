@@ -15,6 +15,7 @@ type Rule = {
   media_caption: string | null;
   media_type: string | null;
   media_targets: MediaTarget[];
+  target_scope: "specific" | "all" | "feeds" | "reels";
   trigger_type: string;
   match_type: string;
   trigger_keyword: string;
@@ -184,7 +185,13 @@ export default function AutorespondPage() {
                     {rule.is_active ? "有効" : "無効"}
                   </span>
                 </div>
-                {(rule.media_targets?.length ?? 0) > 1 ? (
+                {rule.target_scope === "all" ? (
+                  <p className="mt-1 text-xs text-blue-600">対象: 全ての投稿</p>
+                ) : rule.target_scope === "feeds" ? (
+                  <p className="mt-1 text-xs text-blue-600">対象: フィードのみ</p>
+                ) : rule.target_scope === "reels" ? (
+                  <p className="mt-1 text-xs text-blue-600">対象: リールのみ</p>
+                ) : (rule.media_targets?.length ?? 0) > 1 ? (
                   <p className="mt-1 text-xs text-blue-600">
                     対象: {rule.media_targets.length}件の投稿
                   </p>

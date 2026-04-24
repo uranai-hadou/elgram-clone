@@ -66,13 +66,36 @@ export async function POST(req: Request) {
         and(eq(autorespondRules.igAccountId, account.id), eq(autorespondRules.isActive, true), eq(autorespondRules.triggerType, "comment"))
       );
 
+      // Cache media_type lookups per webhook batch
+      let cachedMediaType: string | null = null;
+      const getMediaType = async (): Promise<string | null> => {
+        if (cachedMediaType !== null || !mediaId) return cachedMediaType;
+        try {
+          const r = await fetch(`https://graph.instagram.com/${mediaId}?fields=media_type&access_token=${account.accessToken}`);
+          const d = await r.json();
+          cachedMediaType = (d?.media_type as string) || "";
+        } catch {
+          cachedMediaType = "";
+        }
+        return cachedMediaType;
+      };
+
       for (const rule of rules) {
-        // Target matching: prefer media_targets[], fall back to legacy mediaId
-        const targets = (rule.mediaTargets || []) as { id: string }[];
-        if (targets.length > 0) {
-          if (!targets.some((t) => t.id === mediaId)) continue;
-        } else if (rule.mediaId && rule.mediaId !== mediaId) {
-          continue;
+        const scope = rule.targetScope || "specific";
+        if (scope === "all") {
+          // match any post
+        } else if (scope === "feeds" || scope === "reels") {
+          const mt = await getMediaType();
+          if (scope === "feeds" && mt === "VIDEO") continue;
+          if (scope === "reels" && mt !== "VIDEO") continue;
+        } else {
+          // specific: use media_targets / legacy mediaId
+          const targets = (rule.mediaTargets || []) as { id: string }[];
+          if (targets.length > 0) {
+            if (!targets.some((t) => t.id === mediaId)) continue;
+          } else if (rule.mediaId && rule.mediaId !== mediaId) {
+            continue;
+          }
         }
         if (!matchesRule(rule.matchType || "contains", rule.triggerKeyword || "", text)) continue;
 

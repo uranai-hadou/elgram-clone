@@ -15,6 +15,7 @@ function toJson(r: typeof autorespondRules.$inferSelect) {
     media_caption: r.mediaCaption,
     media_type: r.mediaType,
     media_targets: r.mediaTargets || [],
+    target_scope: r.targetScope || "specific",
     trigger_type: r.triggerType,
     match_type: r.matchType,
     trigger_keyword: r.triggerKeyword,
@@ -43,11 +44,12 @@ export async function POST(req: Request) {
   const userId = await getCurrentUserId();
   const body = await req.json();
 
-  const mediaTargets: MediaTarget[] = Array.isArray(body.media_targets)
-    ? body.media_targets
-    : [];
+  const scope = body.target_scope || "specific";
+  const mediaTargets: MediaTarget[] =
+    scope === "specific" && Array.isArray(body.media_targets)
+      ? body.media_targets
+      : [];
 
-  // Maintain legacy single-post fields for backward compat / list UI
   const primary = mediaTargets[0];
 
   const inserted = await db
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
       mediaCaption: primary?.caption || null,
       mediaType: primary?.media_type || null,
       mediaTargets: mediaTargets.length > 0 ? mediaTargets : null,
+      targetScope: scope,
       triggerType: body.trigger_type || "comment",
       matchType: body.match_type || "contains",
       triggerKeyword: body.trigger_keyword || "",

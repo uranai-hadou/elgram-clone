@@ -14,6 +14,7 @@ function toJson(r: typeof autorespondRules.$inferSelect) {
     media_caption: r.mediaCaption,
     media_type: r.mediaType,
     media_targets: r.mediaTargets || [],
+    target_scope: r.targetScope || "specific",
     trigger_type: r.triggerType,
     match_type: r.matchType,
     trigger_keyword: r.triggerKeyword,
@@ -36,16 +37,28 @@ export async function PATCH(
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = body.name;
   if (body.is_active !== undefined) updates.isActive = body.is_active;
+  if (body.target_scope !== undefined) {
+    updates.targetScope = body.target_scope || "specific";
+    if (body.target_scope !== "specific") {
+      updates.mediaTargets = null;
+      updates.mediaId = null;
+      updates.mediaCaption = null;
+      updates.mediaType = null;
+    }
+  }
   if (body.media_targets !== undefined) {
     const targets: MediaTarget[] = Array.isArray(body.media_targets)
       ? body.media_targets
       : [];
-    updates.mediaTargets = targets.length > 0 ? targets : null;
-    const primary = targets[0];
-    updates.mediaId = primary?.id || null;
-    updates.mediaCaption = primary?.caption || null;
-    updates.mediaType = primary?.media_type || null;
-  } else {
+    const scope = body.target_scope ?? "specific";
+    if (scope === "specific") {
+      updates.mediaTargets = targets.length > 0 ? targets : null;
+      const primary = targets[0];
+      updates.mediaId = primary?.id || null;
+      updates.mediaCaption = primary?.caption || null;
+      updates.mediaType = primary?.media_type || null;
+    }
+  } else if (body.target_scope === undefined) {
     if (body.media_id !== undefined) updates.mediaId = body.media_id;
     if (body.media_caption !== undefined) updates.mediaCaption = body.media_caption;
     if (body.media_type !== undefined) updates.mediaType = body.media_type;

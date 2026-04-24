@@ -56,6 +56,7 @@ export const autorespondRules = pgTable("autorespond_rules", {
   mediaCaption: text("media_caption"),
   mediaType: text("media_type"),
   mediaTargets: jsonb("media_targets").$type<MediaTarget[]>(),
+  targetScope: text("target_scope").default("specific"),
   triggerType: text("trigger_type").default("comment"),
   matchType: text("match_type").default("contains"),
   triggerKeyword: text("trigger_keyword").default(""),
