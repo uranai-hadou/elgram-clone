@@ -35,12 +35,17 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = await req.json();
+  console.log("[webhook] received:", JSON.stringify(body));
 
   for (const entry of body.entry || []) {
     const igUserId = entry.id || "";
 
     const accounts = await db.select().from(instagramAccounts).where(eq(instagramAccounts.igUserId, igUserId));
-    if (accounts.length === 0) continue;
+    if (accounts.length === 0) {
+      console.warn(`[webhook] no account match for igUserId=${igUserId}. Stored IDs:`,
+        (await db.select({ id: instagramAccounts.igUserId }).from(instagramAccounts)).map((r) => r.id));
+      continue;
+    }
     const account = accounts[0];
 
     // Comments
