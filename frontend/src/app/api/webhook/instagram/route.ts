@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { appSettings, instagramAccounts, autorespondRules, messageLogs } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+const GRAPH = "https://graph.instagram.com/v21.0";
 
 function matchesRule(matchType: string, keyword: string, text: string): boolean {
   if (!keyword) return true; // empty keyword = match all
